@@ -42,7 +42,7 @@
 @ FIP (r10) points to the next FORTH word that will be executed
 @ Note: r12 is often considered a "scratch" register
 
-DSP     .req    r13
+DSP     .req    sp
 RSP     .req    r11
 FIP     .req    r10
 
@@ -1472,7 +1472,8 @@ defword "?",1,,QUESTION
 defcode "DEPTH",5,,DEPTH
         ldr     r0, =var_S0             @ address of stack origin
         ldr     r0, [r0]                @ stack origin value
-        sub     r0, r0, DSP             @ number of bytes on stack
+	mov     r1, DSP                 @ TODO ??? move sp to r1. Is r1 in use?
+        sub     r0, r0, r1              @ number of bytes on stack
         mov     r0, r0, ASR #2          @ /4 to count cells
         PUSHDSP r0
         NEXT

@@ -33,10 +33,10 @@ the drive to disappear and the firmware to run.
 
 For development you are going to need an interactive
 in-chip solution. This you can do by buying a pico
-[debug probe.](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html#updating-the-firmware-on-the-debug-probe)
+[debug probe.](https://www.raspberrypi.com/documentation/microcontrollers/debug-probe.html)
 
 Alternatively you can fashion a debugprobe from yourself from a second pico as documented in
-Appendix A of [the Pico Getting started guide.](https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008276-DS-1-getting-started-with-pico.pd)
+Appendix A of [the Pico Getting started guide.](https://pip-assets.raspberrypi.com/categories/610-raspberry-pi-pico/documents/RP-008276-DS-1-getting-started-with-pico.pdf)
 Note that the debugprobe firmware for that second pico is [here.](https://github.com/raspberrypi/debugprobe/releases)
 
 You will also need a custom version of `openocd` to do the in-chip debugging, which you can

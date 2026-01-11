@@ -48,6 +48,14 @@ FIP     .req    r10
 
 @ Define macros to push and pop from the data and return stacks
 
+	.macro SAVERS
+	push	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
+	.endm
+
+	.macro RESTORERS
+	push	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
+	.endm
+
         .macro PUSHRSP reg
         str     \reg, [RSP, #-4]!
         .endm
@@ -88,6 +96,7 @@ FIP     .req    r10
         ldmia   \reg!, {r0-r3}          @ ( r3 r2 r1 r0 -- )
         .endm
 
+
 @ _NEXT is the assembly subroutine that is called
 @ at the end of every FORTH word execution.
 @ The NEXT macro is defined to simply call _NEXT
@@ -100,9 +109,11 @@ FIP     .req    r10
         .align 2                        @ alignment 2^n (2^2 = 4 byte alignment)
         .global jonesforth
 jonesforth:
+	
         ldr r0, =var_S0
         str DSP, [r0]                   @ Save the original stack position in S0
         ldr RSP, =return_stack_top      @ Set the initial return stack position
+
         ldr r0, =data_segment           @ Get the initial data segment address
         ldr r1, =var_HERE               @ Initialize HERE to point at
         str r0, [r1]                    @   the beginning of data segment
@@ -765,28 +776,36 @@ defcode "DSP!",4,,DSPSTORE
 
 @ KEY ( -- c ) Reads a character from stdin
 defcode "KEY",3,,KEY
+	SAVERS
         bl getchar              @ r0 = getchar();
         PUSHDSP r0              @ push the return value on the stack
+	RESTORERS
         NEXT
 
 @ EMIT ( c -- ) Writes character c to stdout
 defcode "EMIT",4,,EMIT
         POPDSP r0
+	SAVERS
         bl putchar              @ putchar(r0);
+	RESTORERS
         NEXT
 
 @ CR ( -- ) print newline
 @ : CR '\n' EMIT ;
 defcode "CR",2,,CR
+	SAVERS
         mov r0, #10
         bl putchar              @ putchar('\n');
+	RESTORERS
         NEXT
 
 @ SPACE ( -- ) print space
 @ : SPACE BL EMIT ;  \ print space
 defcode "SPACE",5,,SPACE
         mov r0, #32
+	SAVERS
         bl putchar              @ putchar(' ');
+	RESTORERS
         NEXT
 
 @ WORD ( -- addr length ) reads next word from stdin
@@ -798,9 +817,12 @@ defcode "WORD",4,,WORD
         NEXT
 
 _WORD:
+	bl inword
         stmfd   sp!, {r6,lr}    @ preserve r6 and lr
 1:
+	push	{r2, r3, r4, r5, r6, r7}
         bl getchar              @ read a character
+	pop	{r2, r3, r4, r5, r6, r7}
         cmp r0, #'\\'
         beq 3f                  @ skip comments until end of line
         cmp r0, #' '
@@ -818,10 +840,13 @@ _WORD:
 
         ldmfd sp!, {r6,lr}      @ restore r6 and lr
         bx lr
+
+	push	{r2, r3, r4, r5, r6, r7}
 3:
         bl getchar              @ skip all characters until end of line
         cmp r0, #'\n'
         bne 3b
+	pop	{r2, r3, r4, r5, r6, r7}
         b 1b
 
 @ word_buffer for WORD
@@ -1595,6 +1620,7 @@ defword "QUIT", 4,, QUIT
 @ No need to backup callee save registers here,
 @ since we are the top level routine!
 defcode "INTERPRET",9,,INTERPRET
+	bl inword
         ldr r12, =var_S0                @ address of stack origin
         ldr r12, [r12]                  @ stack origin value
         cmp r12, DSP                    @ check stack pointer against origin
@@ -1682,6 +1708,11 @@ defcode "INTERPRET",9,,INTERPRET
         .section .rodata
 errstack:
         .ascii "Stack empty!\n"
+
+WEL:	.asciz	"Welcome to AApen!"
+WORDS:	.asciz	"READING WORD"
+NEXTS:	.asciz	"  IN NEXT "
+
 errstackend:
 
 errpfx:
@@ -1735,21 +1766,41 @@ defword "16#",3,,HEXNUMBER
         .int BASE, STORE
         .int EXIT
 
+inword:
+	push	{r2, r3, r4, r5, r6, r7, lr}
+	ldr r0, =WORDS
+        bl printf
+	pop	{r2, r3, r4, r5, r6, r7, pc}
+
+innext:
+	push	{r2, r3, r4, r5, r6, r7, lr}
+	ldr r0, =NEXTS
+        bl printf
+	pop	{r2, r3, r4, r5, r6, r7, pc}
+
+
+welcome:
+	push	{r2, r3, r4, r5, r6, r7, lr}
+	ldr r0, =WEL 
+        bl printf
+	pop	{r2, r3, r4, r5, r6, r7, pc}
+
+
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory
-defcode "UPLOAD",6,,UPLOAD
-        ldr r0, =0x10000        @ Upload buffer address
-        ldr r1, =0x7F00         @ Upload limit (32k - 256) bytes
-        PUSHDSP r0              @ Push buffer address on the stack
-        bl rcv_xmodem           @ r0 = rcv_xmodem(r0, r1);
-        PUSHDSP r0              @ Push upload byte count on the stack
-        NEXT
+@defcode "UPLOAD",6,,UPLOAD
+@        ldr r0, =0x10000        @ Upload buffer address
+@        ldr r1, =0x7F00         @ Upload limit (32k - 256) bytes
+@        PUSHDSP r0              @ Push buffer address on the stack
+@        bl rcv_xmodem           @ r0 = rcv_xmodem(r0, r1);
+@        PUSHDSP r0              @ Push upload byte count on the stack
+@        NEXT
 
 @ DUMP ( addr len -- ) Pretty-printed memory dump
-defcode "DUMP",4,,DUMP
-        POPDSP r1
-        POPDSP r0
-        bl hexdump              @ hexdump(r0, r1);
-        NEXT
+@defcode "DUMP",4,,DUMP
+@        POPDSP r1
+@        POPDSP r0
+@        bl hexdump              @ hexdump(r0, r1);
+@        NEXT
 
 @ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
 defcode "BOOT",4,,BOOT
@@ -1767,9 +1818,9 @@ errboot: .ascii "Bad image!\n"
 errbootend:
 
 @ MONITOR ( -- ) Enter bootstrap monitor
-defcode "MONITOR",7,,MONITOR
-        bl monitor              @ monitor();
-        NEXT
+@defcode "MONITOR",7,,MONITOR
+@        bl monitor              @ monitor();
+@        NEXT
 
 @ EXECUTE ( xt -- ) jump to the address on the stack
 @-- WARNING! THIS MUST BE THE LAST WORD DEFINED IN ASSEMBLY (see LATEST) --@

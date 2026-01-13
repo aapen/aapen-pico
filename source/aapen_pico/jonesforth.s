@@ -53,7 +53,7 @@ FIP     .req    r10
 	.endm
 
 	.macro RESTORERS
-	push	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
+	pop	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
 	.endm
 
         .macro PUSHRSP reg

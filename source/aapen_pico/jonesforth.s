@@ -48,14 +48,6 @@ FIP     .req    r10
 
 @ Define macros to push and pop from the data and return stacks
 
-	.macro SAVERS
-	push	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
-	.endm
-
-	.macro RESTORERS
-	pop	{r2, r3, r4, r5, r6, r7, r10, r11, r12}
-	.endm
-
         .macro PUSHRSP reg
         str     \reg, [RSP, #-4]!
         .endm
@@ -140,6 +132,7 @@ _DOCOL:
 _NEXT:
         ldr r0, [FIP], #4
         ldr r1, [r0]
+	orr r1, r1, #1   @ Thumb mode, set the first bit.
         bx r1
 
 @ cold_start is used to bootstrap the interpreter, 
@@ -776,36 +769,30 @@ defcode "DSP!",4,,DSPSTORE
 
 @ KEY ( -- c ) Reads a character from stdin
 defcode "KEY",3,,KEY
-	SAVERS
         bl getchar              @ r0 = getchar();
         PUSHDSP r0              @ push the return value on the stack
-	RESTORERS
         NEXT
 
 @ EMIT ( c -- ) Writes character c to stdout
 defcode "EMIT",4,,EMIT
         POPDSP r0
-	SAVERS
+	@SAVERS
         bl putchar              @ putchar(r0);
-	RESTORERS
+	@RESTORERS
         NEXT
 
 @ CR ( -- ) print newline
 @ : CR '\n' EMIT ;
 defcode "CR",2,,CR
-	SAVERS
         mov r0, #10
         bl putchar              @ putchar('\n');
-	RESTORERS
         NEXT
 
 @ SPACE ( -- ) print space
 @ : SPACE BL EMIT ;  \ print space
 defcode "SPACE",5,,SPACE
         mov r0, #32
-	SAVERS
         bl putchar              @ putchar(' ');
-	RESTORERS
         NEXT
 
 @ WORD ( -- addr length ) reads next word from stdin
@@ -817,7 +804,6 @@ defcode "WORD",4,,WORD
         NEXT
 
 _WORD:
-	bl inword
         stmfd   sp!, {r6,lr}    @ preserve r6 and lr
 1:
 	push	{r2, r3, r4, r5, r6, r7}
@@ -1620,7 +1606,6 @@ defword "QUIT", 4,, QUIT
 @ No need to backup callee save registers here,
 @ since we are the top level routine!
 defcode "INTERPRET",9,,INTERPRET
-	bl inword
         ldr r12, =var_S0                @ address of stack origin
         ldr r12, [r12]                  @ stack origin value
         cmp r12, DSP                    @ check stack pointer against origin

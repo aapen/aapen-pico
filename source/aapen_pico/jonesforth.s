@@ -112,6 +112,7 @@ jonesforth:
         ldr r1, =var_HERE               @ Initialize HERE to point at
         str r0, [r1]                    @   the beginning of data segment
         ldr FIP, =cold_start            @ Make the FIP point to cold_start
+	bl  welcome
         NEXT                            @ Start the interpreter
 
 @ _DOCOL is the assembly subroutine that is called
@@ -136,6 +137,21 @@ _NEXT:
         ldr r1, [r0]
 	orr r1, r1, #1   @ Thumb mode, set the first bit.
         bx r1
+
+readch:
+	push    {r4, lr}        @ Save r4 (to store char) and lr (return address)
+	bl      getchar         @ Call C function getchar() -> r0
+    	mov     r4, r0          @ Move result to r4 to preserve it across the next call
+    	bl      putchar         @ Call C function putchar(r0)
+
+	cmp	r4, #0x0D	@ If char is a newlne
+	itt	eq
+	moveq	r0, #0x0A	@ echo out a carriage return
+	bleq	putchar
+
+    	mov     r0, r4          @ Restore the original character to r0 for the return value
+    	pop     {r4, pc}        @ Pop r4 back and pop saved lr directly into pc to return
+
 
 @ cold_start is used to bootstrap the interpreter, 
 @ the first word executed is QUIT
@@ -778,9 +794,8 @@ defcode "DSP!",4,,DSPSTORE
 
 @ KEY ( -- c ) Reads a character from stdin
 defcode "KEY",3,,KEY
-        bl getchar              @ r0 = getchar();
+        bl readch               @ r0 = getchar();
         PUSHDSP r0              @ push the return value on the stack
-        bl putchar
         NEXT
 
 @ EMIT ( c -- ) Writes character c to stdout
@@ -817,8 +832,7 @@ _WORD:
         stmfd   sp!, {r6,lr}    @ preserve r6 and lr
 1:
 	push	{r2, r3, r4, r5, r6, r7}
-        bl getchar              @ read a character
-        bl putchar              @ putchar(r0);
+        bl readch               @ r0 = getchar();
 	pop	{r2, r3, r4, r5, r6, r7}
         cmp r0, #'\\'
         beq 3f                  @ skip comments until end of line
@@ -828,8 +842,7 @@ _WORD:
         ldr     r6, =word_buffer
 2:
         strb r0, [r6], #1       @ store character in word buffer
-        bl getchar              @ read more characters until a space is found
-        bl putchar              @ putchar(r0);
+        bl readch               @ r0 = getchar();
         cmp r0, #' '
         bgt 2b
 
@@ -841,8 +854,7 @@ _WORD:
         bx lr
 
 3:
-        bl getchar              @ skip all characters until end of line
-        bl putchar              @ putchar(r0);
+        bl readch               @ r0 = getchar();
         cmp r0, #'\n'
         bne 3b
         b 1b
@@ -1783,10 +1795,10 @@ innext:
 
 
 welcome:
-	push	{r2, r3, r4, r5, r6, r7, lr}
+	push	{r0, lr}
 	ldr r0, =WEL 
         bl printf
-	pop	{r2, r3, r4, r5, r6, r7, pc}
+	pop	{r0, pc}
 
 
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory

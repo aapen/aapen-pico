@@ -57,11 +57,13 @@ FIP     .req    r10
         .endm
 
         .macro PUSHDSP reg
-        str     \reg, [DSP, #-4]!
+        @str     \reg, [DSP, #-4]!
+	PUSH {\reg}
         .endm
 
         .macro POPDSP reg
-        ldr     \reg, [DSP], #4
+        @ldr     \reg, [DSP], #4
+	POP {\reg}
         .endm
 
         .macro PUSH2 reg
@@ -262,6 +264,13 @@ var_\name :
 @  JonesForth chose to use the C-language convention instead.
 @  We prefer the ANS recommendation in this implementation.
 @  Code that just uses TRUE and FALSE will work as expected.
+
+
+@ HELLO (  -- ) prints a message
+defcode "HELLO",5,, HELLO
+        ldr r0, =WEL              // Output match message
+        bl printf
+        NEXT
 
 
 @ DROP ( a -- ) drops the top element of the stack
@@ -771,6 +780,7 @@ defcode "DSP!",4,,DSPSTORE
 defcode "KEY",3,,KEY
         bl getchar              @ r0 = getchar();
         PUSHDSP r0              @ push the return value on the stack
+        bl putchar
         NEXT
 
 @ EMIT ( c -- ) Writes character c to stdout
@@ -808,6 +818,7 @@ _WORD:
 1:
 	push	{r2, r3, r4, r5, r6, r7}
         bl getchar              @ read a character
+        bl putchar              @ putchar(r0);
 	pop	{r2, r3, r4, r5, r6, r7}
         cmp r0, #'\\'
         beq 3f                  @ skip comments until end of line
@@ -818,6 +829,7 @@ _WORD:
 2:
         strb r0, [r6], #1       @ store character in word buffer
         bl getchar              @ read more characters until a space is found
+        bl putchar              @ putchar(r0);
         cmp r0, #' '
         bgt 2b
 
@@ -825,14 +837,14 @@ _WORD:
         sub r1, r6, r0          @ r1, length of word
 
         ldmfd sp!, {r6,lr}      @ restore r6 and lr
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
-	push	{r2, r3, r4, r5, r6, r7}
 3:
         bl getchar              @ skip all characters until end of line
+        bl putchar              @ putchar(r0);
         cmp r0, #'\n'
         bne 3b
-	pop	{r2, r3, r4, r5, r6, r7}
         b 1b
 
 @ word_buffer for WORD
@@ -980,6 +992,7 @@ _FIND:
 4:
         mov r0, r3                      @ move result to r0
         ldmfd   sp!, {r5,r6,r8,r9}      @ restore callee save registers
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
 @ >CFA ( dictionary_address -- executable_address )
@@ -997,6 +1010,7 @@ _TCFA:
         add r0,r0,r1            @ skip the name field
         add r0,r0,#3            @ find the next 4-byte boundary
         and r0,r0,#~3
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
 @ >DFA ( dictionary_address -- data_field_address )
@@ -1062,6 +1076,7 @@ _COMMA:
         ldr     r2, [r1]        @ read HERE
         str     r0, [r2], #4    @ write value and increment address
         str     r2, [r1]        @ update HERE
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx      lr
 
 @ [ ( -- ) Change interpreter state to Immediate mode
@@ -1356,6 +1371,7 @@ _DIVMOD:                        @ Integer Divide/Modulus
         cmp     r3, r1                  @ Jump until tmp < b
         bhs     2b
 
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
 @ on entry r0=integer r1=base
@@ -1589,6 +1605,7 @@ _SDIVMOD:
         bl _TELL                        @ Display error message
 
 5:
+	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
 .section .rodata
@@ -1668,6 +1685,7 @@ defcode "INTERPRET",9,,INTERPRET
 
                                         @ not a literal, execute now
         ldr r1, [r0]                    @ (it's important here that
+	orr r1, r1, #1          @ Thumb mode, set the first bit.
         bx r1                           @  FIP address in r0, since _DOCOL
                                         @  assumes it)
 
@@ -1694,7 +1712,7 @@ defcode "INTERPRET",9,,INTERPRET
 errstack:
         .ascii "Stack empty!\n"
 
-WEL:	.asciz	"Welcome to AApen!"
+WEL:	.asciz	"Welcome to AApen!\n"
 WORDS:	.asciz	"READING WORD"
 NEXTS:	.asciz	"  IN NEXT "
 
@@ -1812,6 +1830,7 @@ errbootend:
 defcode "EXECUTE",7,,EXECUTE
         POPDSP r0
         ldr r1, [r0]
+	orr r1, r1, #1          @ Thumb mode, set the first bit.
         bx r1
 
 @ Reserve space for the return stack (1Kb)

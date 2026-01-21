@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 3.14)
 add_executable(${APP_NAME}
                ${APP_SRC_DIRECTORY}/main.S
                ${APP_SRC_DIRECTORY}/jonesforth.s
+               ${APP_SRC_DIRECTORY}/hex_dump.s
+               ${APP_SRC_DIRECTORY}/xmodem.s
                ${COMMON_SRC_DIRECTORY}/sdk_inlines.c
 )
 

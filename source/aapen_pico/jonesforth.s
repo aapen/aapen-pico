@@ -284,8 +284,7 @@ var_\name :
 
 @ HELLO (  -- ) prints a message
 defcode "HELLO",5,, HELLO
-        ldr r0, =WEL              // Output match message
-        bl printf
+        bl welcome
         NEXT
 
 
@@ -1007,6 +1006,77 @@ _FIND:
 	orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
+@ ?WORDS ( --  )
+@ Print the dictionary.
+defcode "?WORDS",6,,QWORDS
+        bl _QWORDS
+        NEXT
+
+_QWORDS:
+        stmfd   sp!, {r0-r6, lr}  @ save callee save registers
+        ldr r2, =var_LATEST
+1:
+        ldr r2, [r2]                    @ get the last defined word address
+        cmp r2, #0                      @ did we print all the words ?
+        beq 4f                          @ then exit
+
+	@ Print the name followed by a newline
+
+        stmfd   sp!, {r0-r4}            @ hexdump the word
+        mov r0, r2
+        bl dump_word
+        ldmfd sp!, {r0-r4}              
+
+        b 1b                            @ dictionary word
+4:
+        ldmfd sp!, {r0-r6, pc}
+
+
+@ dump_word(r0=word_addr)	
+dump_word:
+	push    {r0-r4, lr}             @ Save registers (8-byte aligned)
+
+	mov  r2, r0			@ r2 now = word addr
+        ldrb r4, [r2, #4]               @ r4 = length + flags field
+        and r1, r4, #F_LEN              @ r1 - keep only length bits
+	bic r4, r4, #F_LEN		@ r4 - keep only the flags
+        add r0, r2, #5                  @ r3 = dict string
+	bl _TELL			@ print the dict string
+
+	@ Print a new line
+        push {r0-r4}            @ putchar('\n')
+        mov r0, #10
+        bl putchar
+        pop {r0-r4}
+
+	@ Print the flags and CFA
+        push {r0-r4}
+	mov r0, r2
+	bl _TCFA
+	mov r1, r4			@ r1 is flags field
+	mov r2, r0
+	ldr r0, =sWHead
+	bl printf
+        pop {r0-r4}
+	
+
+	@ Dump the first 32 cells of the word.
+        push {r0-r4}
+	mov r0, r2
+	mov r1, 32
+	bl hex_dump
+        pop {r0-r4}
+ 
+	@ Print a couple of new lines
+        push {r0-r4}
+        mov r0, #10
+        bl putchar
+        pop {r0-r4}
+
+	@ Return
+	pop     {r0-r4, pc}
+
+
 @ >CFA ( dictionary_address -- executable_address )
 @ Transformat a dictionary address into a code field address
 defcode ">CFA",4,,TCFA
@@ -1022,7 +1092,7 @@ _TCFA:
         add r0,r0,r1            @ skip the name field
         add r0,r0,#3            @ find the next 4-byte boundary
         and r0,r0,#~3
-	orr lr, lr, #1          @ Thumb mode, set the first bit.
+	@ orr lr, lr, #1          @ Thumb mode, set the first bit.
         bx lr
 
 @ >DFA ( dictionary_address -- data_field_address )
@@ -1334,7 +1404,7 @@ defcode "TELL",4,,TELL
         NEXT
 
 _TELL:
-        stmfd sp!, {r4-r5, lr}  @ stack save + return address
+        stmfd sp!, {r2-r5, lr}  @ stack save + return address
         mov r4, r0              @ address
         mov r5, r1              @ length
         b 2f
@@ -1344,7 +1414,7 @@ _TELL:
 2:                              @ }
         subs r5, r5, #1
         bge 1b
-        ldmfd sp!, {r4-r5, pc}  @ stack restore + return
+        ldmfd sp!, {r2-r5, pc}  @ stack restore + return
 
 @ DIVMOD computes the unsigned integer division and remainder
 @ The implementation is based upon the algorithm extracted from 'ARM Software
@@ -1697,7 +1767,7 @@ defcode "INTERPRET",9,,INTERPRET
 
                                         @ not a literal, execute now
         ldr r1, [r0]                    @ (it's important here that
-	orr r1, r1, #1          @ Thumb mode, set the first bit.
+	orr r1, r1, #1			@ Thumb mode, set the first bit.
         bx r1                           @  FIP address in r0, since _DOCOL
                                         @  assumes it)
 
@@ -1724,9 +1794,9 @@ defcode "INTERPRET",9,,INTERPRET
 errstack:
         .ascii "Stack empty!\n"
 
-WEL:	.asciz	"Welcome to AApen!\n"
-WORDS:	.asciz	"READING WORD"
-NEXTS:	.asciz	"  IN NEXT "
+sWELCOME: .asciz "\nWelcome to AApen!\n"
+sOK:	.asciz	"OK "
+sWHead:	.asciz	"FLAGS: 0x%x CFA: 0x%x\n"
 
 errstackend:
 
@@ -1781,25 +1851,17 @@ defword "16#",3,,HEXNUMBER
         .int BASE, STORE
         .int EXIT
 
-inword:
-	push	{r2, r3, r4, r5, r6, r7, lr}
-	ldr r0, =WORDS
-        bl printf
-	pop	{r2, r3, r4, r5, r6, r7, pc}
-
-innext:
-	push	{r2, r3, r4, r5, r6, r7, lr}
-	ldr r0, =NEXTS
-        bl printf
-	pop	{r2, r3, r4, r5, r6, r7, pc}
-
-
-welcome:
+ok:
 	push	{r0, lr}
-	ldr r0, =WEL 
+	ldr r0, =sOK
         bl printf
 	pop	{r0, pc}
 
+welcome:
+	push	{r0, lr}
+	ldr r0, =sWELCOME
+        bl printf
+	pop	{r0, pc}
 
 @ UPLOAD ( -- addr len ) XMODEM file upload to memory
 @defcode "UPLOAD",6,,UPLOAD
@@ -1811,11 +1873,17 @@ welcome:
 @        NEXT
 
 @ DUMP ( addr len -- ) Pretty-printed memory dump
-@defcode "DUMP",4,,DUMP
-@        POPDSP r1
-@        POPDSP r0
-@        bl hexdump              @ hexdump(r0, r1);
-@        NEXT
+defcode "DUMP",4,,DUMP
+        POPDSP r1
+        POPDSP r0
+	bl hex_dump
+        NEXT
+
+@ UPLOAD ( addr len -- ) Pretty-printed memory dump
+defcode "UPLOAD",6,,UPLOAD
+        ldr r0, =scratch_pad    @ Upload buffer address
+	bl xmodem_receive
+        NEXT
 
 @ BOOT ( addr len -- ) Boot from memory image (see UPLOAD)
 defcode "BOOT",4,,BOOT
@@ -1864,7 +1932,7 @@ data_segment_top:
 @ Reserve space for scratch-pad buffer (128b)
         .bss
         .align 5                @ align to cache-line size
-        .set SCRATCH_PAD_SIZE, 0x80
+        .set SCRATCH_PAD_SIZE, 0x100
 scratch_pad:
         .space SCRATCH_PAD_SIZE
 scratch_pad_top:
